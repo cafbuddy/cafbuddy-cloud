@@ -5,35 +5,54 @@ Parse.Cloud.define("getMatches", function(request, response) {
     // Set the query parameters
     var query1 = new Parse.Query("Meals");
 	var query2 = new Parse.Query("Meals"); 
-    var innerQuery = new Parse.Query(Parse.User);
+	var query3 = new Parse.Query("Meals");
+	var query4 = new Parse.Query("Meals");
+    var checkSelfQuery = new Parse.Query(Parse.User);
 	var user1 = JSON.parse(JSON.stringify(request.user));
 	var user1IdString = user1.objectId;
 	var user1Id = new Parse.User({objectId:user1IdString});
-	//var user1Id = request.user.objectId;
-    innerQuery.equalTo("objectId", user1IdString);
+
+	//console.log("user1IdString is "+user1IdString);
+    checkSelfQuery.equalTo("objectId", user1IdString);
 	
-	//Added Conditions to eliminate meal objects made by the requesting user
-	query1.doesNotMatchQuery("userId", innerQuery);
-	
-    query1.greaterThanOrEqualTo("start", request.params.start);
-    query1.lessThanOrEqualTo("end", request.params.end);
+    query1.greaterThanOrEqualTo("start", request.params.start);//715 > 6 True
+    query1.lessThanOrEqualTo("end", request.params.start);//8:15 < 6 False
     query1.equalTo("type", request.params.type);
     query1.equalTo("matched", false);
- 	
-	query2.doesNotMatchQuery("userId", innerQuery);
+	//Check to remove all matches that include yourself
+	query1.doesNotMatchQuery("userId", checkSelfQuery);
 	
-    query2.greaterThanOrEqualTo("end", request.params.end);
-    query2.lessThanOrEqualTo("start", request.params.start);
+    query2.greaterThanOrEqualTo("start", request.params.end);//7:15 > 11 False
+    query2.lessThanOrEqualTo("end", request.params.end);//8:15 < 11 True
     query2.equalTo("type", request.params.type);
     query2.equalTo("matched", false);
+	//Check to remove all matches that include yourself
+	query2.doesNotMatchQuery("userId", checkSelfQuery);
+	
+    query3.greaterThanOrEqualTo("start", request.params.start);//7:15 > 6 True
+    query3.lessThanOrEqualTo("start", request.params.end);//7:15 < 11 True
+    query3.equalTo("type", request.params.type);
+    query3.equalTo("matched", false);
+	//Check to remove all matches that include yourself
+	query3.doesNotMatchQuery("userId", checkSelfQuery);
+	
+    query4.greaterThanOrEqualTo("end", request.params.start);//8:15 > 6 True
+    query4.lessThanOrEqualTo("end", request.params.end);//8:15 < 11 True
+    query4.equalTo("type", request.params.type);
+    query4.equalTo("matched", false);
+	//Check to remove all matches that include yourself
+	query4.doesNotMatchQuery("userId", checkSelfQuery);
+
+	var firstQuery = Parse.Query.or(query1,query2);
+	var secondQuery = Parse.Query.or(query3,query4);
+	var mainQuery = Parse.Query.or(firstQuery,secondQuery);
     
-	var mainQuery = Parse.Query.or(query1,query2);
     // Run the query
     mainQuery.find({
         // Success Function - results is an array of Parse Objects matching the query
         success: function(results) {
-            if(results != []) {
-				console.log(JSON.stringify(results));
+            if(results.length > 0) {
+				console.log("results is "+JSON.stringify(results));
 				//console.log("results = "+results);
                 // Select a random match
 				
@@ -41,26 +60,35 @@ Parse.Cloud.define("getMatches", function(request, response) {
 				//var user1 = JSON.parse(JSON.stringify(request.user));
 				var user2 = JSON.parse(JSON.stringify(results[randMatch]));
 				var user2IdString = user2.userId.objectId;
+				console.log("Look at This "+user2);
+				var mealId2 = user2.objectId;
 				var user2Id = new Parse.User({objectId:user2IdString});
-				//console.log("Request.User is "+JSON.stringify(request.user));
-				//console.log("user1Id is " +user1Id);
-				//console.log("randMatch is "+JSON.stringify(results[randMatch]));
-				//console.log("user2Id is " +user2Id);
-				
  			   	
                 // Create a match object
                 var Matches = Parse.Object.extend("Matches");
                 var match = new Matches();
-                 
-                //newmatch.set("user1Id", request.user.objectId);
-                //newmatch.set("user2Id", results[randMatch].objectId);
-				
+                var mealId1 = request.params.mealId;
+				var user1StartTime = new Date(request.params.start);
+				var user2StartTime = user2.start;
+				console.log("user1StartTime-> "+user1StartTime);
+				console.log("user2StartTime-> "+user2StartTime);
+                var finalStartTime = 0;
+				if (user1StartTime.get > user2StartTime)
+				{
+					finalStartTime = user1StartTime;
+				}
+				else
+				{
+					finalStartTime = user2StartTime;
+				}
 				match.set("user1Id", user1Id);
 				match.set("user2Id", user2Id);
                 match.set("type", request.params.type);
-                match.set("start", request.params.start);//Doesnt have to be requesters start time, can be buddies time also
+				match.set("mealIdOne",mealId1);
+				match.set("mealIdTwo",mealId2);
+                match.set("start", finalStartTime);//Doesnt have to be requesters start time, can be buddies time also
 				//match.set("user1Id","Nooney");
-                     
+                
                 //console.log(newmatch);
                
                 match.save(null, {
@@ -72,12 +100,8 @@ Parse.Cloud.define("getMatches", function(request, response) {
                     }
                 });
                  
-				//response.success()
-                // return the results
-                //response.success(JSON.stringify(results[randMatch]));
-                //response.success(JSON.stringify(results[randMatch]));
             } else {
-                response.success("No Match");
+                //response.success("No Match");
             }
             response.success();
         },
@@ -126,6 +150,8 @@ Parse.Cloud.define("getMealsToday", function(request, response) {
 Parse.Cloud.afterSave("Matches", function(request) {//, response
     var user1Id = request.object.get('user1Id');
     var user2Id = request.object.get('user2Id');
+	var mealId1 = request.object.get('mealIdOne');
+	var mealId2 = request.object.get('mealIdTwo');
 	var matchId = request.object.id;
 	var user1 = JSON.parse(JSON.stringify(user1Id));
 	var user1IdString = user1.objectId;
@@ -142,18 +168,17 @@ Parse.Cloud.afterSave("Matches", function(request) {//, response
     innerQuery.containedIn("objectId", [user1IdString, user2IdString]);
      
     query.matchesQuery("userId", innerQuery);
-    query.greaterThanOrEqualTo("end", mealtime);
-    query.lessThanOrEqualTo("start", mealtime);
-     
+	query.containedIn("objectId",[mealId1,mealId2]); 
 	
     query.find({
         success: function(results) {
             // Modify the resulting rows and save them
 			//console.log(JSON.stringify(results));
-			for(var i=0;i<results.length;i++)
+			for(var i=0; i<results.length; i++)
 			{
 				results[i].set("matched",true);
 				results[i].set("matchId",matchId);
+				results[i].set("start",mealtime);
 				results[i].save();
 			}
 			
@@ -193,44 +218,17 @@ Parse.Cloud.afterSave("Matches", function(request) {//, response
 	//response.success();
 });
 
-/*
-// This function notifies users when a match was made between them
-Parse.Cloud.afterSave("Matches", function(request) {
-    // Match contains the two user Ids we need to send notifications to
-    var user1Id = request.object.get('user1Id');
-    var user2Id = request.object.get('user2Id');
-     
-    var pushQuery = new Parse.Query(Parse.Installation);
-    var innerQuery = new Parse.Query(Parse.User);
-     
-    innerQuery.containedIn("objectId", [user1Id, user2Id]);
-     
-    pushQuery.matchesQuery("userId", innerQuery);
-     
-    Parse.Push.send({
-        where: pushQuery,
-        data: {
-            alert: "A match was found!"
-        }
-    }, {
-        success: function() {
-            // Push was successful
-        },
-        error: function(error) {
-            throw "Error: " + error.code + " " + error.message;
-        }
-    });
-});
-*/
-// This function converts the UTC timestamps to CST (by subtracting 6 hrs)
-
 Parse.Cloud.afterSave("Meals", function(request) {
-
+	
+	console.log("Meals After Save Function Called");
+	var mealId = request.object.id;
+	console.log("mealId is "+mealId);
     // Run the matching algorithm
     Parse.Cloud.run('getMatches', {
         start: request.object.get("start"), 
         end: request.object.get("end"), 
-        type: request.object.get("type")
+        type: request.object.get("type"),
+		mealId: mealId
         }, {        
         success: function(result) {
             console.log("getMatches success!");
@@ -242,6 +240,38 @@ Parse.Cloud.afterSave("Meals", function(request) {
     });
 
 });
+/*
+Parse.Cloud.afterSave("Chat", function(request) {
+	
+	var mealId = request.object.id;
+    var pushQuery = new Parse.Query(Parse.Installation);
+    var insideQuery = new Parse.Query(Parse.User);
+     
+    insideQuery.containedIn("objectId", [user1IdString, user2IdString]);
+     
+    pushQuery.matchesQuery("userId", insideQuery);
+     
+    Parse.Push.send({
+        where: pushQuery,
+        data: {
+            alert: "A match was found!",
+			user1Id: user1IdString,
+			user2Id: user2IdString,
+			matchId: matchId,
+			pushType: "MealMatch",
+			sound: "MealMatch.wav"
+			
+        }
+    }, {
+        success: function() {
+            // Push was successful
+        },
+        error: function(error) {
+            throw "Error: " + error.code + " " + error.message;
+        }
+    });
+
+});*/
 
 Parse.Cloud.beforeSave("Meals", function(request, response) {
      
