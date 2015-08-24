@@ -1,4 +1,1 @@
-+cafbuddy-cloud
-+==============
-+
-+Cloud Code for the Parse Backend
+Cloud Code for the Parse Backend
