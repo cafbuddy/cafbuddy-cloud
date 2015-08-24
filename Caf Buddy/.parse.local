@@ -1,0 +1,10 @@
+{
+  "applications": {
+    "Caf Buddy": {
+      "applicationId": "bmDUg9FpdVWafY8fWBrbN1WXNKBS5MEwb2nDVzvd"
+    },
+    "_default": {
+      "link": "Caf Buddy"
+    }
+  }
+}
